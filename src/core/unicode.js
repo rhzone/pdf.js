@@ -1640,7 +1640,7 @@ function reverseIfRtl(chars) {
   return buf.join("");
 }
 
-const SpecialCharRegExp = new RegExp("^(\\s)|(\\p{Mn})|(\\p{Cf})$", "u");
+const SpecialCharRegExp = new RegExp("^(\s)|(\p{Mn})|(\p{Cf})$/u");
 const CategoryCache = new Map();
 
 function getCharUnicodeCategory(char) {

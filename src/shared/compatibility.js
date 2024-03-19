@@ -64,6 +64,13 @@ import { isNodeJS } from "./is_node.js";
   require("core-js/es/array/at.js");
 })();
 
+(function checkPromiseAllSettled() {
+  if (Promise.allSettled) {
+    return;
+  }
+  require("core-js/es/promise/all-settled.js");
+})();
+
 // Support: Firefox<90, Chrome<92, Safari<15.4, Node.js<16.6.0
 (function checkTypedArrayAt() {
   if (Uint8Array.prototype.at) {

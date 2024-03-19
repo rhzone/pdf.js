@@ -79,14 +79,9 @@ const CONFIG_FILE = "pdfjs.config";
 const config = JSON.parse(fs.readFileSync(CONFIG_FILE).toString());
 
 const ENV_TARGETS = [
-  "last 2 versions",
-  "Chrome >= 85",
-  "Firefox ESR",
-  "Safari >= 14",
-  "Node >= 14",
-  "> 1%",
-  "not IE > 0",
-  "not dead",
+  "Chrome >= 48",
+  "android >= 6",
+  "ios >= 11",
 ];
 
 // Default Autoprefixer config used for generic, components, minified-pre
@@ -223,7 +218,10 @@ function createWebpackConfig(
   const plugins = [];
   if (!disableLicenseHeader) {
     plugins.push(
-      new webpack2.BannerPlugin({ banner: licenseHeaderLibre, raw: true })
+      new webpack2.BannerPlugin({ banner: licenseHeaderLibre, raw: true }),
+      new webpack2.DefinePlugin({
+        globalThis: 'self'
+      })
     );
   }
 
@@ -231,7 +229,7 @@ function createWebpackConfig(
     output.library?.type === "module" ? { outputModule: true } : undefined;
 
   // Required to expose e.g., the `window` object.
-  output.globalObject = "globalThis";
+  // output.globalObject = "globalThis";
 
   return {
     mode: "none",
@@ -256,7 +254,9 @@ function createWebpackConfig(
           loader: "babel-loader",
           exclude: babelExcludeRegExp,
           options: {
-            presets: skipBabel ? undefined : ["@babel/preset-env"],
+            presets: skipBabel ? undefined : [["@babel/preset-env", {
+              corejs: {version: 3, proposals: true},
+            }]],
             plugins: babelPlugins,
             targets: BABEL_TARGETS,
           },
@@ -274,6 +274,7 @@ function createWebpackConfig(
     // Avoid shadowing actual Node.js variables with polyfills, by disabling
     // polyfills/mocks - https://webpack.js.org/configuration/node/
     node: false,
+    devtool: 'eval-source-map',
   };
 }
 
@@ -1401,7 +1402,7 @@ gulp.task(
             postcss([
               postcssLogical({ preserve: true }),
               postcssDirPseudoClass(),
-              autoprefixer({ overrideBrowserslist: ["Chrome >= 85"] }),
+              autoprefixer({ overrideBrowserslist: ["Chrome >= 76"] }),
             ])
           )
           .pipe(gulp.dest(CHROME_BUILD_CONTENT_DIR + "web")),
@@ -1804,8 +1805,9 @@ gulp.task(
     "generic",
     "types",
     function createTypesTest() {
+      const [packageJsonSrc] = packageBowerJson();
       return merge([
-        packageJson().pipe(gulp.dest(TYPESTEST_DIR)),
+        packageJsonSrc.pipe(gulp.dest(TYPESTEST_DIR)),
         gulp
           .src([
             GENERIC_DIR + "build/pdf.js",
@@ -1974,7 +1976,7 @@ gulp.task("dev-css", function createDevCSS() {
         postcss([
           postcssLogical({ preserve: true }),
           postcssDirPseudoClass(),
-          autoprefixer({ overrideBrowserslist: ["last 1 versions"] }),
+          autoprefixer({ overrideBrowserslist: ["last 2 versions"] }),
         ])
       )
       .pipe(gulp.dest(cssDir)),
@@ -2148,7 +2150,7 @@ gulp.task(
   )
 );
 
-function packageJson() {
+function packageBowerJson() {
   const VERSION = getVersionJSON().version;
 
   const DIST_NAME = "pdfjs-dist";
@@ -2169,8 +2171,16 @@ function packageJson() {
     bugs: DIST_BUGS_URL,
     license: DIST_LICENSE,
     dependencies: {
-      canvas: "^2.10.1",
+      dommatrix: "^1.0.3",
       "web-streams-polyfill": "^3.2.1",
+    },
+    peerDependencies: {
+      "worker-loader": "^3.0.8", // Used in `external/dist/webpack.js`.
+    },
+    peerDependenciesMeta: {
+      "worker-loader": {
+        optional: true,
+      },
     },
     browser: {
       canvas: false,
@@ -2187,10 +2197,18 @@ function packageJson() {
     },
   };
 
-  return createStringSource(
-    "package.json",
-    JSON.stringify(npmManifest, null, 2)
-  );
+  const bowerManifest = {
+    name: DIST_NAME,
+    version: VERSION,
+    main: ["build/pdf.js", "build/pdf.worker.js"],
+    ignore: [],
+    keywords: DIST_KEYWORDS,
+  };
+
+  return [
+    createStringSource("package.json", JSON.stringify(npmManifest, null, 2)),
+    createStringSource("bower.json", JSON.stringify(bowerManifest, null, 2)),
+  ];
 }
 
 gulp.task(
@@ -2218,8 +2236,12 @@ gulp.task(
       console.log("### Overwriting all files");
       rimraf.sync(path.join(DIST_DIR, "*"));
 
+      // Rebuilding manifests
+      const [packageJsonSrc, bowerJsonSrc] = packageBowerJson();
+
       return merge([
-        packageJson().pipe(gulp.dest(DIST_DIR)),
+        packageJsonSrc.pipe(gulp.dest(DIST_DIR)),
+        bowerJsonSrc.pipe(gulp.dest(DIST_DIR)),
         vfs
           .src("external/dist/**/*", { base: "external/dist", stripBOM: false })
           .pipe(gulp.dest(DIST_DIR)),
@@ -2453,5 +2475,9 @@ gulp.task("externaltest", function (done) {
 
 gulp.task(
   "ci-test",
-  gulp.series(gulp.parallel("lint", "externaltest", "unittestcli"), "typestest")
+  gulp.series(
+    gulp.parallel("lint", "externaltest", "unittestcli"),
+    "lint-chromium",
+    "typestest"
+  )
 );

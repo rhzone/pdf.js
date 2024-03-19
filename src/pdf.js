@@ -48,6 +48,7 @@ import {
   setPDFNetworkStreamFactory,
   version,
 } from "./display/api.js";
+import 'abortcontroller-polyfill/dist/polyfill-patch-fetch'
 import {
   getFilenameFromUrl,
   getPdfFilenameFromUrl,
